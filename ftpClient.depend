@@ -1,0 +1,16 @@
+# depslib dependency file v1.0
+1445262151 source:c:\users\Ñî¿­º½\codeblockprj\ftpclient\main.cpp
+	<iostream>
+	<stdlib.h>
+	<stdio.h>
+	<winsock2.h>
+	"ftpCode.h"
+	"ftpAPI.h"
+
+1445259738 c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpcode.h
+
+1445264189 c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpapi.h
+	<winsock2.h>
+	<iostream>
+	<stdio.h>
+
