@@ -97,6 +97,9 @@ SOCKET ftp_connect(char *host, int port) {
 
     return instr_socket;
 }
+void socket_clean(SOCKET sock) {
+    WSACleanup();
+}
 int ftp_cmd_send(SOCKET sock, char * cmd, char *rec_buf, ssize_t *len) {
     ssize_t s_len;
     char s_buf[BUFSIZ];
@@ -136,8 +139,98 @@ int ftp_cmd_send(SOCKET sock, char *cmd) {
     cout << "Server: " << s_buf << endl;
 
     if (0 == result) {
-        sscanf(s_buf, "d", &result);
+        sscanf(s_buf, "%d", &result);
     }
 
     return result;
+}
+int ftp_login (SOCKET sock, char *username, char *password) {
+    char buf[BUFSIZ];
+    int result;
+    sprintf(buf, "USER %s\r\n", username);
+
+    int timeout = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
+
+    result = ftp_cmd_send(sock, buf);
+
+#ifndef NDEBUG
+    cout << "Login result：" << result << endl;
+#endif
+
+    if (FTP_LOGIN_SUCCESS == result) {
+        // 可以直接登录 登陆成功
+        return 0;
+    }
+    else if (FTP_PW_NEEDED == result) {
+        sprintf(buf, "PASS %s\r\n", password);
+        result = ftp_cmd_send(sock, buf);
+
+        if (FTP_LOGIN_SUCCESS == result) {
+            // 登陆成功
+            cout << "登录成功!" << endl;
+            return 0;
+        }
+        else {
+            // 密码错误或者登录出错
+            return -1;
+        }
+    }
+    return -1;
+}
+int ftp_logout(SOCKET sock) {
+    int result = ftp_cmd_send(sock, "QUIT\r\n");
+    closesocket(sock);
+    socket_clean(sock);
+    return result;
+}
+int ftp_cwd(SOCKET sock, char *dir) {
+    int result;
+    char buf[BUFSIZ];
+
+    sprintf(buf, "CWD %s\r\n", dir);
+    result = ftp_cmd_send(sock, buf);
+#ifndef NDEBUG
+    cout << "工作目录改变结果：" << result << endl;
+#endif
+    if (FTP_FILE_ACT_FIN == result) {
+        return 0;
+    }
+
+    return -1;
+}
+
+int ftp_list(SOCKET sock, char *dir) {
+    char buf[BUFSIZ];
+    int result;
+
+    sprintf(buf, "LIST %s\r\n", dir);
+
+    // 发送请求
+    result = ftp_cmd_send(sock, buf);
+
+#ifndef NDEBUG
+    cout << "LIST Result: " << result << endl;
+#endif // NDEBUG
+    return 0;
+}
+
+int ftp_type(SOCKET sock, char type) {
+    char buf[BUFSIZ];
+    int result;
+
+    sprintf(buf, "TYPE %c\r\n", type);
+
+    result = ftp_cmd_send(sock, buf);
+
+#ifndef NDEBUG
+    cout << "CHANGE TYPE Result: " << result << endl;
+#endif
+    if (FTP_SUCCESS == result) {
+        return 0;
+    }
+    return -1;
+}
+SOCKET ftp_data_pasv(SOCKET instr_sock) {
+
 }

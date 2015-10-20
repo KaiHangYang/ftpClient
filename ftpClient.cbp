@@ -32,6 +32,9 @@
 			<Add option="-Wall" />
 			<Add option="-fexceptions" />
 		</Compiler>
+		<Unit filename="ftpAPI.cpp" />
+		<Unit filename="ftpAPI.h" />
+		<Unit filename="ftpCode.h" />
 		<Unit filename="main.cpp" />
 		<Extensions>
 			<code_completion />
