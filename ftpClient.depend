@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1445343471 source:c:\users\Ñî¿­º½\codeblockprj\ftpclient\main.cpp
+1445525392 source:c:\users\Ñî¿­º½\codeblockprj\ftpclient\main.cpp
 	<iostream>
 	<stdlib.h>
 	<stdio.h>
@@ -7,14 +7,15 @@
 	"ftpCode.h"
 	"ftpAPI.h"
 
-1445259738 c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpcode.h
+1445407795 c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpcode.h
 
-1445343186 c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpapi.h
+1445522939 c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpapi.h
 	<winsock2.h>
 	<iostream>
 	<stdio.h>
 
-1445343430 source:c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpapi.cpp
+1445526157 source:c:\users\Ñî¿­º½\codeblockprj\ftpclient\ftpapi.cpp
 	"ftpAPI.h"
 	"ftpCode.h"
+	"time.h"
 
