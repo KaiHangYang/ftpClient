@@ -3,28 +3,24 @@
 #include "time.h"
 using namespace std;
 
-
+// 对port模式的一种妥协
 int getRandomPort() {
     static int counter = 0;
     srand((int)time(NULL)+counter);
     ++counter;
     return (rand()%(10240) + 2250);
 }
-
-/*
-    函数名：errorInfoStrip
-    作用：将错误信息全部导出完。注意：必须是在出错的情况下才能调用，否则程序卡死
-    参数：sock
-    返回值：无
-*/
-void errorInfoStrip(SOCKET sock) {
+// 一个小的hack技术。
+int msgCheck(SOCKET sock) {
+    int result;
+    char code[3];
     char buf[BUFSIZ];
-    int len;
-    len = recv(sock, buf, BUFSIZ, 0);
-    buf[len] = 0;
-    cout << "extra error：" << buf << endl;
+    result = recv(sock, buf, BUFSIZ, MSG_PEEK);
+    strncpy(code, buf, 3);
+    if (!((code[0] >= '0' && code[0] <= '9') && (code[1] >= '0' && code[1] <= '9') || (code[1] >= '0' && code[1] <= '9'))) {
+        recv(sock, buf, BUFSIZ, 0);
+    }
 }
-
 SOCKET socket_connect(char * host, int port) {
     int i = 0;
     unsigned char ch[4];
@@ -67,7 +63,6 @@ SOCKET socket_connect(char * host, int port) {
     int timeout = 3000;
     int ret = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout));
     ret = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
-
     // 服务器地址
     struct sockaddr_in address;
     address.sin_family = AF_INET;
@@ -125,14 +120,14 @@ void socket_clean(SOCKET sock) {
 int ftp_cmd_send(SOCKET sock, char * cmd, char *rec_buf, ssize_t *len) {
     ssize_t s_len;
     char s_buf[BUFSIZ];
-    char tmp_buf[BUFSIZ];
 
     if (SOCKET_ERROR == (send(sock, cmd, strlen(cmd), 0))) {
         // 发送命令失败
         return -1;
     }
 
-    s_len = recv(sock, s_buf, sizeof(s_buf), 0);
+    msgCheck(sock);
+    s_len = recv(sock, s_buf, BUFSIZ, 0);
 
     if (s_len < 1) {
         return -1;
@@ -155,13 +150,13 @@ int ftp_cmd_send(SOCKET sock, char *cmd) {
     ssize_t s_len;
     char s_buf[BUFSIZ];
     int result;
-    char tmpcmd[4];
+//    char tmpcmd[4];
 
-    cout << "Client: " << cmd << endl;
+    cout << "Client:" << cmd << endl;
 
     result = ftp_cmd_send(sock, cmd, s_buf, &s_len);
 
-    cout << "Server: " << s_buf << endl;
+    cout << "Server:" << s_buf << endl;
 
     if (0 == result) {
         sscanf(s_buf, "%d", &result);
@@ -170,13 +165,13 @@ int ftp_cmd_send(SOCKET sock, char *cmd) {
     if (result == 550) {
         cout << result << endl;
 
-        strncpy(tmpcmd, cmd, 3);
-        tmpcmd[3] = 0;
-
-        // 目前只有list 在出现问题的时候没有问题
-        if (strcmp(tmpcmd, "LIS") != 0) {
-            errorInfoStrip(sock);
-        }
+//        strncpy(tmpcmd, cmd, 3);
+//        tmpcmd[3] = 0;
+//
+//         目前只有list 在出现问题的时候没有问题
+//        if (strcmp(tmpcmd, "LIS") != 0) {
+//            errorInfoStrip(sock);
+//        }
     }
     cout << result << endl;
     return result;
@@ -237,100 +232,6 @@ int ftp_cwd(SOCKET sock, char *dir) {
     return -1;
 }
 
-int ftp_list(SOCKET sock, char *dir, char **data, int *data_len, int isPort) {
-    SOCKET data_sock;
-    SOCKET tmp_sock;
-    char buf[BUFSIZ];
-    char * data_buf;
-    int result;
-    ssize_t len, total_len, buf_len;
-    int usedPort = 1;
-
-
-    if (!isPort) {
-        data_sock = ftp_data_pasv(sock);
-        usedPort = 0;
-    }
-    else {
-        data_sock = ftp_data_port(sock);
-
-        if (-1 == data_sock) {
-            // 使用port模式连接失败换用pasv模式
-            data_sock = ftp_data_pasv(sock);
-            usedPort = 0;
-        }
-    }
-
-    if (-1 == data_sock) {
-        return  -1;
-    }
-
-    memset(buf, sizeof(buf), 0);
-    sprintf(buf, "LIST %s\r\n", dir);
-
-    result = ftp_cmd_send(sock, buf);
-#ifndef NDEBUG
-    cout << "ftp_list: send reuslt ->" << result << endl;
-#endif // NDEBUG
-    if (result >= 300 || result == -1) {
-        return result;
-    }
-
-    // 命令传送成功 如果是Port模式开启获取数据连接
-
-    if (usedPort) {
-        // 使用了Port模式的话就获取data连接
-        tmp_sock = data_sock;
-        data_sock = accept(tmp_sock, NULL, NULL);
-        if (data_sock == INVALID_SOCKET) {
-            return -1;
-        }
-    }
-    total_len = len = 0;
-    buf_len = BUFSIZ;
-    data_buf = (char *)malloc(buf_len);
-
-    while ((len = recv(data_sock, buf, BUFSIZ, 0)) > 0) {
-        // 如果接受到的数据超出了最大的buf容量重新分配
-        if (total_len+len > buf_len) {
-            buf_len *= 2;
-            char * data_buf_tmp = (char *)malloc(buf_len);
-            memcpy(data_buf_tmp, data_buf, total_len);
-            free(data_buf);
-            data_buf = data_buf_tmp;
-        }
-        memcpy(data_buf+total_len, buf, len);
-        total_len += len;
-    }
-    // 手动终端数据连接
-    ftp_cmd_send(sock, "ABOR\r\n");
-    if (usedPort) {
-        closesocket(tmp_sock);
-    }
-    closesocket(data_sock);
-
-
-    // 从命令端获取数据
-
-    memset(buf, BUFSIZ, 0);
-
-    len = recv(sock, buf, BUFSIZ, 0);
-    buf[len] = 0;
-    // 获取状态码
-    sscanf(buf, "%d", &result);
-#ifndef NDEBUG
-    cout << "ftp_list: List data finished code -> " << result << endl;
-#endif
-    if (FTP_FILE_SUSSFIN != result) {
-        // 如果没有成功结束文件传输过程
-        free(data_buf);
-        return result;
-    }
-    *data = data_buf;
-    *data_len = total_len;
-    return 0;
-}
-
 int ftp_type(SOCKET sock, char type) {
     char buf[BUFSIZ];
     int result;
@@ -388,7 +289,7 @@ SOCKET ftp_data_port (SOCKET sock) {
     struct sockaddr_in portAddr;
     int result;
     char buf[BUFSIZ];
-    int p1 = 0, p2 = 0;// 默认从2050开始测试端口
+    int p1 = 9, p2 = 4;
 
     int port = getRandomPort();
     cout << "Random port is " << port << endl;
@@ -404,7 +305,7 @@ SOCKET ftp_data_port (SOCKET sock) {
 
     portAddr.sin_family = AF_INET;
     portAddr.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
-    portAddr.sin_port = htons((unsigned short)(p1*256+p2));
+    portAddr.sin_port = htons((unsigned short)(p1*256+p2)); // 通过这样让客户端自己分配空闲端口
 
     while ((result = bind(data_sock, (struct sockaddr *)&portAddr, sizeof(portAddr))) != 0) {
         if (WSAEADDRINUSE == result) {
@@ -434,6 +335,10 @@ SOCKET ftp_data_port (SOCKET sock) {
         return -1;
     }
 
+//    int portLen;
+//    result = getsockname(data_sock, (struct sockaddr *)&portAddr, &portLen);
+//    p1 = portAddr.sin_port / 256;
+//    p2 = portAddr.sin_port % 256;
     // 成功监听之后就可以发送指令了
     memset(buf, BUFSIZ, 0);
     sprintf(buf, "PORT 127,0,0,1,%d,%d\r\n", p1, p2);
@@ -447,6 +352,101 @@ SOCKET ftp_data_port (SOCKET sock) {
 
     return data_sock;
 }
+int ftp_list(SOCKET sock, char *dir, char **data, int *data_len, int isPort) {
+    SOCKET data_sock;
+    SOCKET tmp_sock;
+    char buf[BUFSIZ];
+    char * data_buf;
+    int result;
+    ssize_t len, total_len, buf_len;
+    int usedPort = 1;
+
+
+    if (!isPort) {
+        data_sock = ftp_data_pasv(sock);
+        usedPort = 0;
+    }
+    else {
+        data_sock = ftp_data_port(sock);
+
+        if (-1 == data_sock) {
+            // 使用port模式连接失败换用pasv模式
+            data_sock = ftp_data_pasv(sock);
+            usedPort = 0;
+        }
+    }
+
+    if (-1 == data_sock) {
+        return  -1;
+    }
+
+    memset(buf, sizeof(buf), 0);
+    sprintf(buf, "LIST %s\r\n", dir);
+
+    result = ftp_cmd_send(sock, buf);
+#ifndef NDEBUG
+    cout << "ftp_list: send reuslt ->" << result << endl;
+#endif // NDEBUG
+    if (result >= 300 || result == -1) {
+        return result;
+    }
+
+    // 命令传送成功 如果是Port模式开启获取数据连接
+
+    if (usedPort) {
+        // 使用了Port模式的话就获取data连接
+        tmp_sock = data_sock;
+        data_sock = accept(tmp_sock, NULL, NULL);
+        if (data_sock == INVALID_SOCKET) {
+            return -1;
+        }
+    }
+
+    total_len = len = 0;
+    buf_len = BUFSIZ;
+    data_buf = (char *)malloc(buf_len);
+    cout << "Begin to accept datas" << endl;
+
+    while ((len = recv(data_sock, buf, BUFSIZ, 0)) > 0) {
+        // 如果接受到的数据超出了最大的buf容量重新分配
+        cout << "recevied something!" << endl;
+        if (total_len+len > buf_len) {
+            buf_len *= 2;
+            char * data_buf_tmp = (char *)malloc(buf_len);
+            memcpy(data_buf_tmp, data_buf, total_len);
+            free(data_buf);
+            data_buf = data_buf_tmp;
+        }
+        memcpy(data_buf+total_len, buf, len);
+        total_len += len;
+    }
+
+    if (usedPort) {
+        closesocket(tmp_sock);
+    }
+    closesocket(data_sock);
+
+
+    // 从命令端获取数据
+
+    memset(buf, BUFSIZ, 0);
+
+    len = recv(sock, buf, BUFSIZ, 0);
+    buf[len] = 0;
+    // 获取状态码
+    sscanf(buf, "%d", &result);
+#ifndef NDEBUG
+    cout << "ftp_list: List data finished code -> " << result << endl;
+#endif
+    if (FTP_FILE_SUSSFIN != result) {
+        // 如果没有成功结束文件传输过程
+        free(data_buf);
+        return result;
+    }
+    *data = data_buf;
+    *data_len = total_len;
+    return 0;
+}
 int ftp_file_download(SOCKET sock, char *server_file, char *local_file, int *file_size, int isPort) {
 
     SOCKET data_sock, tmp_sock;
@@ -456,8 +456,6 @@ int ftp_file_download(SOCKET sock, char *server_file, char *local_file, int *fil
     ssize_t len, write_len;
     int usedPort = 1;
 
-
-    fp = fopen(local_file, "wb");
 
     if (NULL == fp) {
         cout << "ftp_file_download: Create in local failed!" << endl;
@@ -484,7 +482,6 @@ int ftp_file_download(SOCKET sock, char *server_file, char *local_file, int *fil
 
     if (-1 == data_sock) {
         // 创建数据连接失败
-        fclose(fp);
         return -1;
     }
 
@@ -497,7 +494,6 @@ int ftp_file_download(SOCKET sock, char *server_file, char *local_file, int *fil
 #endif // NDEBUG
     if (result >= 300 || -1 == result) {
         // 出现错误
-        fclose(fp);
         return result;
     }
 
@@ -511,6 +507,7 @@ int ftp_file_download(SOCKET sock, char *server_file, char *local_file, int *fil
     }
 
     // 如果一切正常就开始下载数据
+    fp = fopen(local_file, "wb");
     memset(buf, BUFSIZ, 0);
     while ((len = recv(data_sock, buf, BUFSIZ, 0)) > 0) {
         write_len = fwrite(&buf, len, 1, fp);
@@ -525,12 +522,11 @@ int ftp_file_download(SOCKET sock, char *server_file, char *local_file, int *fil
             *file_size += write_len;
         }
     }
-
-    ftp_cmd_send(sock, "ABOR\r\n");
     // 完成下载
     if (usedPort) {
         closesocket(tmp_sock);
     }
+
     closesocket(data_sock);
 
 
@@ -631,13 +627,12 @@ int ftp_file_upload(SOCKET sock, char *server_file, char *local_file, int *file_
             *file_size += len;
         }
     }
-
-    ftp_cmd_send(sock, "ABOR\r\n");
     // 上传完成
     if (usedPort) {
         closesocket(tmp_sock);
     }
     closesocket(data_sock);
+
 
     fclose(fp);
 
@@ -662,6 +657,15 @@ int ftp_file_del(SOCKET sock, char *file) {
 
     result = ftp_cmd_send(sock, buf);
 
+    if (0 != result) {
+        return result;
+    }
+    return 0;
+}
+int ftp_quit(SOCKET sock) {
+    int result;
+
+    result = ftp_cmd_send(sock, "QUIT\r\n");
     if (0 != result) {
         return result;
     }

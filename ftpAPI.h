@@ -133,4 +133,12 @@ int ftp_file_upload(SOCKET sock, char *server_file, char *local_file, int *file_
     返回：0表示成功，其他表示不成功
 */
 int ftp_file_del(SOCKET sock, char *file);
+
+/*
+    函数名：ftp_quit
+    作用：退出FTP服务器
+    参数：命令套接子
+    返回：0表示成功，其他表示失败
+*/
+int ftp_quit(SOCKET sock);
 #endif // FTPAPI_H_INCLUDED
