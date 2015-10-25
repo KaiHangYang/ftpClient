@@ -21,18 +21,20 @@ int msgCheck(SOCKET sock) {
         recv(sock, buf, BUFSIZ, 0);
     }
 }
-SOCKET socket_connect(char * host, int port) {
-    int i = 0;
-    unsigned char ch[4];
-    char ip[20];
-
+int init_wsa() {
     //  启动windows下异步套接字，调用WSAStartup之后才能使用socket的函数
     WSADATA wsaData;
     WORD sockVersion = MAKEWORD(2, 0);
     if (WSAStartup(sockVersion, &wsaData)) {
         cout << "Init socket dll Error!" << endl;
-        exit(1);
+        return -1;
     }
+    return 0;
+}
+SOCKET socket_connect(char * host, int port) {
+    int i = 0;
+    unsigned char ch[4];
+    char ip[20];
 
     // 解析域名
     struct hostent * server = gethostbyname(host);
@@ -60,7 +62,7 @@ SOCKET socket_connect(char * host, int port) {
     }
 
     // 为socket添加超时
-    int timeout = 3000;
+    int timeout = 2000;
     int ret = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout));
     ret = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
     // 服务器地址
@@ -114,7 +116,7 @@ SOCKET ftp_connect(char *host, int port) {
 
     return instr_socket;
 }
-void socket_clean(SOCKET sock) {
+void socket_clean() {
     WSACleanup();
 }
 int ftp_cmd_send(SOCKET sock, char * cmd, char *rec_buf, ssize_t *len) {
@@ -213,7 +215,7 @@ int ftp_login (SOCKET sock, char *username, char *password) {
 int ftp_logout(SOCKET sock) {
     int result = ftp_cmd_send(sock, "QUIT\r\n");
     closesocket(sock);
-    socket_clean(sock);
+    socket_clean();
     return result;
 }
 int ftp_cwd(SOCKET sock, char *dir) {

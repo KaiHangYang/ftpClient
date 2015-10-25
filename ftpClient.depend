@@ -39,23 +39,37 @@
 	"ftpCode.h"
 	"ftpAPI.h"
 
-1445673004 source:f:\codeblockprj\ftpclient\ftpapi.cpp
+1445754336 source:f:\codeblockprj\ftpclient\ftpapi.cpp
 	"ftpAPI.h"
 	"ftpCode.h"
 	"time.h"
 
-1445653041 f:\codeblockprj\ftpclient\ftpapi.h
+1445753979 f:\codeblockprj\ftpclient\ftpapi.h
 	<winsock2.h>
 	<iostream>
 	<stdio.h>
 
 1445407795 f:\codeblockprj\ftpclient\ftpcode.h
 
-1445672767 source:f:\codeblockprj\ftpclient\main.cpp
+1445764516 source:f:\codeblockprj\ftpclient\main.cpp
 	<iostream>
 	<stdlib.h>
 	<stdio.h>
+	<windows.h>
+	<windowsx.h>
+	<commdlg.h>
+	<commctrl.h>
+	<string.h>
 	<winsock2.h>
+	"resource.h"
 	"ftpCode.h"
 	"ftpAPI.h"
+
+1445764573 source:f:\codeblockprj\ftpclient\ftpclient.rc
+	<windows.h>
+	<commctrl.h>
+	<richedit.h>
+	"resource.h"
+
+1445764573 f:\codeblockprj\ftpclient\resource.h
 

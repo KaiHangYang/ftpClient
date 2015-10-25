@@ -21,6 +21,14 @@ void errorInfoStrip(SOCKET sock);
 
 
 /*
+    函数名：init_wsa
+    作用：初始化
+    参数：null
+    返回值：0成功 如果没有成功创建的话返回-1
+
+*/
+int init_wsa();
+/*
     函数名：socket_connect
     作用：创建一个连接服务器的socket 并且返回
     参数：IP或者域名，端口号(默认21)
@@ -34,7 +42,7 @@ SOCKET socket_connect(char * host, int port = 21);
     参数：socket套接字
     返回值：void
 */
-void socket_clean(SOCKET sock);
+void socket_clean();
 /*
     函数名：ftp_connect
     作用：连接FTP服务器
@@ -46,7 +54,7 @@ SOCKET ftp_connect(char *host, int port = 21);
     函数名：ftp_cmd_send
     作用：传输命令并且获取返回的信息
     参数：已连接FTP的socket，命令，返回的数据buf，返回的数据长度
-    返回值：0表示成功，其他表示失败
+    返回值：-1表示失败
 */
 int ftp_cmd_send(SOCKET sock, char * cmd, char *rec_buf, ssize_t *len);
 /*
