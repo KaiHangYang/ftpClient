@@ -7,7 +7,6 @@
 #include <commctrl.h>
 #include <string.h>
 #include <winsock2.h>
-
 #include "resource.h"
 #include "ftpCode.h"
 #include "ftpAPI.h"
@@ -18,12 +17,18 @@
 #define MAX_COM_LENGTH 25
 
 using namespace std;
-
 SOCKET cmd_socks[5];
 char g_username[MAX_COM_LENGTH];
 char g_password[MAX_COM_LENGTH];
 char g_ip[MAX_IP_LENGTH];
 char g_port[MAX_PORT_LENGTH];
+int isPort = 0;
+HWND clientNotice = NULL;
+char currDirPath[100][BUFSIZ];
+HWND listView;
+HWND mainHandle;
+int currLevel;
+int dirchangeFlag;
 
 OPENFILENAME
 newFileDialog (HWND handler, LPCTSTR ext) {
@@ -43,6 +48,107 @@ newFileDialog (HWND handler, LPCTSTR ext) {
     ofn.lpstrDefExt = ext;
     return ofn;
 }
+
+void setClientNotice(char *txt) {
+    Static_SetText(clientNotice, txt);
+}
+DWORD WINAPI getCurrentDir(void *arg) {
+    HWND listView = GetDlgItem(mainHandle, 12);
+    char *dirList = (char *)malloc(sizeof(char)*BUFSIZ);
+    int listLength;
+    int result;
+    char * mixFilename = (char *)malloc(100);
+
+    result = ftp_list(cmd_socks[0], currDirPath[currLevel], &dirList, &listLength, isPort);
+    dirList[listLength] = '\n';
+    dirList[listLength+1] = '\0';
+
+    if (result != 0) {
+        setClientNotice("获取列表失败！");
+        return 1;
+    }
+
+    int flag = 0;int i = 0;
+    char name[50][BUFSIZ];
+    char type[50][BUFSIZ];
+    char line[50][BUFSIZ];
+    int lineSize = 0;
+    //获取格式化后的字符串
+    while (listLength-flag >= 2) {
+        sscanf(dirList+flag, "%[^\r\n]\r\n", line[i]);
+        flag += (strlen(line[i])+2);
+        lineSize ++;
+        cout << flag << "\t" << strlen(dirList) << "\t" << line[i] << endl;
+        ++i;
+    }
+
+//     对字符串进行格式化获取文件名和文件类型
+
+    for (int j=0; j < lineSize; j++) {
+
+//        sscanf(line[j], "%*[^<]<%[^>]>%*[\ ]%[^\0]", type[j], name[j]);
+        if (strstr(line[j], "<") != NULL && strstr(line[j], ">") != NULL) {
+            sscanf(line[j], "%*[^<]<%[^>]>%*[\ ]%[^\0]", type[j], name[j]);
+        }
+        else {
+            strrev(line[j]);
+            sscanf(line[j], "%[^\ ]", name[j]);
+            strrev(line[j]);
+            strrev(name[j]);
+            type[j][0] = '\0';
+
+        }
+    }
+    // 先清空列表
+    ListView_DeleteAllItems(listView);
+
+    LV_ITEM item;
+    ZeroMemory(&item, sizeof(LV_ITEM));
+
+    item.mask = LVIF_TEXT;
+    item.cchTextMax = MAX_PATH;
+    item.iItem = 0;
+    item.iSubItem = 0;
+    for (int j=0; j < lineSize; j++) {
+        cout << "type: " << type[j] << "\t name: " << name[j] << endl;
+        memset(mixFilename, sizeof(mixFilename), 0);
+        sprintf(mixFilename, "%s<%s>", name[j], (strlen(type[j]) == 0 ? "file":"dir"));
+        cout << mixFilename << endl;
+        item.pszText = mixFilename;
+        SendMessage(listView, LVM_INSERTITEM, 0, (LPARAM)&item);
+    }
+
+    return 0;
+}
+
+DWORD WINAPI changeDir(void *arg) {
+    int result;
+    result = ftp_cwd(cmd_socks[0], currDirPath[currLevel]);
+    if (result != 0) {
+        setClientNotice("改变目录失败！");
+        if (dirchangeFlag) {
+            // 进入文件夹失败
+            --currLevel;
+            strcpy(currDirPath[currLevel+1], "");
+        }
+        else {
+            ++currLevel;
+        }
+    }
+    if (!dirchangeFlag) {
+        // 返回上层文件夹成功之后
+        strcpy(currDirPath[currLevel+1], "");
+    }
+    if (currLevel == 0) {
+        Button_Enable(GetDlgItem(mainHandle, 16), FALSE);
+    }
+    else {
+        Button_Enable(GetDlgItem(mainHandle, 16), TRUE);
+    }
+    Button_SetText(GetDlgItem(mainHandle, 1), currDirPath[currLevel]);
+    getCurrentDir(NULL);
+}
+
 BOOL CALLBACK
 clientWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -54,7 +160,40 @@ clientWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_INITDIALOG: {
             InitCommonControls();
             //初始化界面
+            mainHandle = hWnd;
             HWND dfile = GetDlgItem(hWnd, 4);
+            SetWindowText(dfile, "双击左边的文件选定下载的文件！");
+
+            HWND mode = GetDlgItem(hWnd, 6);
+            Button_SetCheck(mode, TRUE);
+
+            // 提示信息
+            HWND notice = GetDlgItem(hWnd, 10);
+            clientNotice = notice;
+            Static_SetText(notice, "欢迎使用！");
+
+            // 禁用上层文件
+            Button_Enable(GetDlgItem(hWnd, 16), FALSE);
+            // 对树型结构的测试
+            listView = GetDlgItem(hWnd, 12);
+
+            // 初始化当前路径
+            currLevel = 0;
+            strcpy(currDirPath[currLevel], "/");
+
+
+            CreateThread(NULL, 0, &getCurrentDir, NULL, 0, NULL);
+            Button_SetText(GetDlgItem(mainHandle, 1), currDirPath[currLevel]);
+//            getCurrentDir(NULL);
+
+//            LV_ITEM item;
+//            ZeroMemory(&item, sizeof(LV_ITEM));
+////
+//            item.mask = LVIF_TEXT;
+//            item.cchTextMax = MAX_PATH;
+//            item.iItem = 0;
+//            item.iSubItem = 0;
+//            item.pszText = "测试";
 
             break;
         }
@@ -71,7 +210,16 @@ clientWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
                     break;
                 }
-                case 6: {
+                case 13: {
+                    CreateThread(NULL, 0, &getCurrentDir, NULL, 0, NULL);
+                    break;
+                }
+                case 16: {
+                    // 返回上层文件夹
+                    currLevel--;
+                    dirchangeFlag = 0;
+
+                    CreateThread(NULL, 0, &changeDir, NULL, 0, NULL);
 
                     break;
                 }
@@ -80,6 +228,79 @@ clientWindow (HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     break;
                 }
             }
+        }
+        case WM_NOTIFY :{
+            switch (LOWORD((wParam))) {
+                case 12 :{
+                    LV_ITEM lvi;
+
+                    if (((LPNMHDR)lParam)->code == NM_DBLCLK) {
+
+                        cout << "Double clicked:" << endl;
+                        char Text[255];
+                        int Selected = SendMessage(listView, LVM_GETNEXTITEM, -1, LVNI_FOCUSED);
+
+                        memset(&lvi, 0, sizeof(lvi));
+
+                        if (Selected == -1) {
+                            break;
+                        }
+
+                        lvi.mask=LVIF_TEXT;
+                        lvi.iSubItem = 0;
+                        lvi.pszText = Text;
+                        lvi.cchTextMax = 256;
+                        lvi.iItem = Selected;
+                        SendMessage(listView,LVM_GETITEMTEXT, Selected, (LPARAM)&lvi);
+
+                        if (strstr(Text, "file") != NULL) {
+                            // 文件的话
+                            cout << "选取的是文件" << endl;
+                            char fileName[BUFSIZ];
+                            sscanf(Text, "%[^<]", fileName);
+                            cout << fileName << endl;
+
+                            // 选择要下载的文件
+                            char filePath[BUFSIZ];
+                            if (currLevel == 0) {
+                                sprintf(filePath, "%s%s", currDirPath[currLevel], fileName);
+                            }
+                            else {
+                                sprintf(filePath, "%s/%s", currDirPath[currLevel], fileName);
+                            }
+
+                            cout << "要下载的文件" << filePath << endl;
+                            Button_SetText(GetDlgItem(hWnd, 4), filePath);
+                        }
+                        else if (strstr(Text, "dir") != NULL) {
+                            cout << "当前文件夹" << currDirPath[currLevel] << endl;
+                            cout << "选取的是文件夹" << endl;
+                            char dirName[BUFSIZ];
+                            sscanf(Text, "%[^<]", dirName);
+                            cout << dirName << endl;
+
+                            // 进入相关的文件夹
+                            currLevel++;
+                            strcpy(currDirPath[currLevel], currDirPath[currLevel-1]);
+                            if (currLevel != 1) {
+                                strcat(currDirPath[currLevel], "/");
+                            }
+                            strcat(currDirPath[currLevel], dirName);
+                            dirchangeFlag = 1;
+                            // 改变当前的文件夹
+                            cout << currLevel << endl;
+
+                            CreateThread(NULL, 0, &changeDir, NULL, 0, NULL);
+                        }
+                        else {
+                            cout << "文件信息格式化错误" << endl;
+                            setClientNotice("文件信息格式化过程错误！");
+                        }
+                    }
+                    break;
+                }
+            }
+            break;
         }
         default: {
                 return FALSE;
@@ -250,7 +471,8 @@ int main(int argc,char * argv[]) {
     HMODULE hRichEditDll = LoadLibrary(TEXT("RICHED20.dll"));
     HINSTANCE handle = GetModuleHandle(NULL);
     DialogBoxParam(handle, MAKEINTRESOURCE(IDD_DIALOG1), NULL, (DLGPROC)loginWindow, 0);
-//    DialogBoxParam(handle, LPSTR(IDD_DIALOG2), NULL, (DLGPROC)clientWindow, 0);
+////    DialogBoxParam(handle, LPSTR(IDD_DIALOG2), NULL, (DLGPROC)clientWindow, 0);
     FreeLibrary(hRichEditDll);
+
     return 0;
 }
